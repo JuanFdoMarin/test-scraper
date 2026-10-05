@@ -35,14 +35,21 @@ class PipelineOrquestador:
         """Crea el browser de Playwright la primera vez que se necesita (lazy)."""
         if self._browser is None:
             self._pw = sync_playwright().start()
-            self._browser = self._pw.chromium.launch(
-                headless=True,
-                args=[
+            launch_kwargs = {
+                "headless": True,
+                "args": [
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
                     "--disable-web-security",
                 ],
-            )
+            }
+            if sys.platform == "win32":
+                launch_kwargs["executable_path"] = (
+                    r"C:\Users\Juan Fdo Marin R\AppData\Local\ms-playwright"
+                    r"\chromium_headless_shell-1243\chrome-headless-shell-win64"
+                    r"\chrome-headless-shell.exe"
+                )
+            self._browser = self._pw.chromium.launch(**launch_kwargs)
         return self._browser
 
     def _close_browser(self):
