@@ -79,7 +79,9 @@ class WordExporter:
             ("Portal / ID:", f"{fuente.get('portal', 'N/A')} — (ID: {inmueble.get('id_propiedad', 'N/A')})"),
             ("Operación / Tipo:", f"{inmueble.get('operacion', 'N/A')} | {inmueble.get('tipo', 'N/A')}"),
             ("Precio:", f"${monto_fmt} {precio.get('moneda', 'COP')}{admin_str}"),
-            ("Ubicación:", f"{ubicacion.get('barrio_sector') or 'N/A'}, {ubicacion.get('ciudad') or 'N/A'} - {ubicacion.get('departamento') or ''}"),
+            ("Ubicación:", (
+                f"{ubicacion.get('barrio_sector')}, " if ubicacion.get('barrio_sector') else ""
+            ) + f"{ubicacion.get('ciudad') or 'N/A'} - {ubicacion.get('departamento') or ''}"),
             ("Área / Estrato:", f"{caracteristicas.get('area_construida_m2')} m² | Estrato {caracteristicas.get('estrato')}"),
             ("Distribución:", f"{caracteristicas.get('habitaciones')} Habs | {caracteristicas.get('banos')} Baños | {caracteristicas.get('parqueaderos', 'N/A')} Parqueaderos"),
             ("Enlace:", fuente.get("url", "N/A")),
@@ -119,7 +121,8 @@ class WordExporter:
             run_img.bold = True
             run_img.font.size = Pt(10)
 
-            portal_folder = f"{fuente.get('portal', '').lower()}_{inmueble.get('id_propiedad')}"
+            portal_slug = fuente.get('portal', '').lower().replace(' ', '')
+            portal_folder = f"{portal_slug}_{inmueble.get('id_propiedad')}"
             p_imgs = self.doc.add_paragraph()
             p_imgs.alignment = WD_ALIGN_PARAGRAPH.LEFT
 

@@ -9,6 +9,7 @@ from scraper100C import CiencuadrasScraper
 from scraperFR import FincaRaizScraper
 from scraperM2 import MetroCuadradoScraper
 from scraper21 import Century21Scraper
+from scraper21online import Century21OnlineScraper
 from word_exporter import WordExporter
 from playwright.sync_api import sync_playwright
 
@@ -74,7 +75,9 @@ class PipelineOrquestador:
             return FincaRaizScraper(url)
         elif "metrocuadrado.com" in url_lower:
             return MetroCuadradoScraper(url)
-        elif "century21colombia.com/" in url_lower:
+        elif "21online.century21colombia.com" in url_lower:
+            return Century21OnlineScraper(url)
+        elif "century21colombia.com" in url_lower:
             return Century21Scraper(url)
         else:
             raise ValueError(f"Portal no soportado para la URL: {url}")

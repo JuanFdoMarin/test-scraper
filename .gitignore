@@ -1,3 +1,6 @@
+# Variables de entorno (credenciales)
+.env
+
 # Entornos virtuales
 .venv/
 venv/
@@ -13,6 +16,7 @@ ciencuadras_*/
 fincaraiz_*/
 metrocuadrado_*/
 century21_*/
+century21online_*/
 resultados_consolidados/
 
 # Logs
@@ -25,3 +29,16 @@ pipeline.log
 build/
 dist/
 *.spec
+
+# AI SDLC Factory — regenerable run output (added automatically)
+docs/superpowers/README.md
+docs/superpowers/db/
+docs/superpowers/reports/
+docs/superpowers/backlog.json
+.ai-run/outbox/
+docs/superpowers/runs/**
+!docs/superpowers/runs/*/
+!docs/superpowers/runs/*/handoff.md
+docs/superpowers/tasks/**
+!docs/superpowers/tasks/*/
+!docs/superpowers/tasks/*/handoff.md
