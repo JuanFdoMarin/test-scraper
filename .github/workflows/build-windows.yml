@@ -1,0 +1,42 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Construir ejecutable
+        run: |
+          pyinstaller --onefile --name ScraperInmuebles --clean `
+            --hidden-import=playwright.sync_api `
+            --hidden-import=bs4 `
+            --hidden-import=lxml `
+            --hidden-import=lxml.etree `
+            --hidden-import=lxml._elementpath `
+            --collect-all=playwright `
+            main.py
+
+      - name: Subir ejecutable como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScraperInmuebles-Windows
+          path: dist/ScraperInmuebles.exe
+          retention-days: 30

@@ -1,0 +1,47 @@
+{
+  "fuente": {
+    "portal": "string",
+    "url": "string",
+    "id_inmueble": "string"
+  },
+  "inmueble": {
+    "id_propiedad": "string",
+    "titulo": "string",
+    "operacion": "string | null",
+    "tipo_inmueble": "string | null",
+    "precio": {
+      "monto": "integer | null",
+      "administracion": "integer | null",
+      "moneda": "COP"
+    },
+    "ubicacion": {
+      "ciudad": "string | null",
+      "departamento": "string | null",
+      "barrio_sector": "string | null",
+      "direccion": "string | null",
+      "pais": "Colombia"
+    },
+    "descripcion": "string | null",
+    "caracteristicas": {
+      "area_construida_m2": "number | null",
+      "habitaciones": "integer | null",
+      "banos": "integer | null",
+      "estrato": "integer | null",
+      "parqueaderos": "integer | null",
+      "piso": "integer | null",
+      "ano_construccion": "integer | null",
+      "cocina": "string | null",
+      "ascensores": "integer | null"
+    },
+    "amenidades": ["string"],
+    "total_imagenes": "integer",
+    "imagenes": [
+      {
+        "orden": "integer",
+        "url": "string",
+        "espacio": "string | null",
+        "archivo_local": "string"
+      }
+    ]
+  }
+}

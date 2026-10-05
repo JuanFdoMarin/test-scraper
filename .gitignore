@@ -1,0 +1,27 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Carpetas generadas por el scraper
+ciencuadras_*/
+fincaraiz_*/
+metrocuadrado_*/
+century21_*/
+resultados_consolidados/
+
+# Logs
+pipeline.log
+
+# macOS
+.DS_Store
+
+# Build PyInstaller
+build/
+dist/
+*.spec
