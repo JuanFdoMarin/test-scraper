@@ -1,10 +1,10 @@
 import os
 import sys
+import csv
 import json
 import logging
 import subprocess
 from typing import List, Dict, Any, Optional
-import pandas as pd
 
 
 def _ensure_playwright():
@@ -146,9 +146,11 @@ class PipelineOrquestador:
                 }
             )
 
-        df = pd.DataFrame(filas_aplanadas)
         csv_path = os.path.join(self.output_dir, "inmuebles_consolidado.csv")
-        df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+        with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=filas_aplanadas[0].keys())
+            writer.writeheader()
+            writer.writerows(filas_aplanadas)
         logger.info(f"Dataset CSV guardado en: {csv_path}")
 
         # 3. Exportación Word (.docx)
