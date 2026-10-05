@@ -21,22 +21,25 @@ class FincaRaizScraper:
         match = re.search(r"(\d{5,10})", url)
         return match.group(1) if match else "desconocido"
 
-    def fetch_rendered_html_and_images(self) -> tuple[str, list]:
+    def fetch_rendered_html_and_images(self, browser=None) -> tuple[str, list]:
         """Método de interfaz estandarizada para compatibilidad con main.py."""
-        return self.fetch_data_and_extract_images()
+        return self.fetch_data_and_extract_images(browser=browser)
 
     def fetch_page(self) -> str:
         """Alias para invocaciones simples que solo requieren el HTML."""
         html, _ = self.fetch_data_and_extract_images()
         return html
 
-    def fetch_data_and_extract_images(self) -> tuple[str, list]:
+    def fetch_data_and_extract_images(self, browser=None) -> tuple[str, list]:
         print(f"[1/4] Iniciando navegador (ID Inmueble: {self.id_inmueble})...")
 
         gallery_images = []
+        _pw = None
+        _own = browser is None
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
+        if _own:
+            _pw = sync_playwright().start()
+            browser = _pw.chromium.launch(
                 headless=True,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -45,85 +48,98 @@ class FincaRaizScraper:
                 ],
             )
 
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={"width": 1920, "height": 1080},
-                locale="es-CO",
-            )
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080},
+            locale="es-CO",
+        )
+        page = context.new_page()
 
-            page = context.new_page()
+        try:
+            page.goto(self.url, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(3000)
 
+            # --- ESTRATEGIA 1: EXTRAER LISTA OFICIAL DESDE NEXT.JS DATA ---
+            print("  [+] Intentando extraer lista oficial de imágenes desde el estado de Next.js...")
+            next_data_raw = page.evaluate("() => window.__NEXT_DATA__ ? JSON.stringify(window.__NEXT_DATA__) : null")
+
+            if next_data_raw:
+                found_urls = re.findall(r'https?://[^\s"\'\\]+?\.(?:jpg|jpeg|png|webp)', next_data_raw, re.I)
+
+                clean_found = []
+                for u in found_urls:
+                    u_clean = u.replace("\\", "").split("?")[0]
+                    if not re.search(r"(logo|avatar|icon|map|tile|static|assets|\.svg|banner|user|agent|popup|promo|ads)", u_clean, re.I):
+                        if u_clean not in clean_found:
+                            clean_found.append(u_clean)
+
+                if clean_found:
+                    print(f"  [OK] Se encontraron {len(clean_found)} URLs puras en el estado interno.")
+                    gallery_images = clean_found
+
+            # --- ESTRATEGIA 2: EXTRAER DESDE MODAL SI NO HAY NEXT_DATA ---
+            if not gallery_images:
+                print("  [+] Abriendo galería modal para aislar las fotos del inmueble...")
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(1000)
+
+                click_targets = [
+                    "button:has-text('fotos')",
+                    "button:has-text('Fotos')",
+                    "button:has-text('Ver todas')",
+                    "[data-testid*='gallery']",
+                    "[class*='gallery']",
+                ]
+
+                for selector in click_targets:
+                    try:
+                        element = page.query_selector(selector)
+                        if element and element.is_visible():
+                            element.click(force=True)
+                            page.wait_for_timeout(2000)
+                            break
+                    except Exception:
+                        continue
+
+                modal_images = page.evaluate("""() => {
+                    const modal = document.querySelector('[role="dialog"], [class*="modal"], [class*="lightbox"], [class*="gallery-viewer"]');
+                    const scope = modal ? modal : document.querySelector('main') || document.body;
+                    const imgs = Array.from(scope.querySelectorAll('img'));
+                    return imgs.map(img => img.src || img.getAttribute('data-src')).filter(Boolean);
+                }""")
+
+                for u in modal_images:
+                    clean_u = u.split("?")[0]
+                    if not re.search(r"(logo|avatar|icon|map|tile|static|assets|\.svg|google|facebook|popup|promo|ads)", clean_u, re.I):
+                        if clean_u not in gallery_images:
+                            gallery_images.append(clean_u)
+
+            html_content = page.content()
+
+            with open(os.path.join(self.folder, "pagina_renderizada.html"), "w", encoding="utf-8") as f:
+                f.write(html_content)
+
+            return html_content, gallery_images
+
+        except Exception as e:
+            print(f"  [Error en navegación]: {e}")
+            return None, gallery_images
+
+        finally:
             try:
-                page.goto(self.url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(3000)
-
-                # --- ESTRATEGIA 1: EXTRAER LISTA OFICIAL DESDE NEXT.JS DATA ---
-                print("  [+] Intentando extraer lista oficial de imágenes desde el estado de Next.js...")
-                next_data_raw = page.evaluate("() => window.__NEXT_DATA__ ? JSON.stringify(window.__NEXT_DATA__) : null")
-                
-                if next_data_raw:
-                    found_urls = re.findall(r'https?://[^\s"\'\\]+?\.(?:jpg|jpeg|png|webp)', next_data_raw, re.I)
-                    
-                    clean_found = []
-                    for u in found_urls:
-                        u_clean = u.replace("\\", "").split("?")[0]
-                        if not re.search(r"(logo|avatar|icon|map|tile|static|assets|\.svg|banner|user|agent|popup|promo|ads)", u_clean, re.I):
-                            if u_clean not in clean_found:
-                                clean_found.append(u_clean)
-                    
-                    if clean_found:
-                        print(f"  [OK] Se encontraron {len(clean_found)} URLs puras en el estado interno.")
-                        gallery_images = clean_found
-
-                # --- ESTRATEGIA 2: EXTRAER DESDE MODAL SI NO HAY NEXT_DATA ---
-                if not gallery_images:
-                    print("  [+] Abriendo galería modal para aislar las fotos del inmueble...")
-                    page.evaluate("window.scrollTo(0, 0)")
-                    page.wait_for_timeout(1000)
-
-                    click_targets = [
-                        "button:has-text('fotos')",
-                        "button:has-text('Fotos')",
-                        "button:has-text('Ver todas')",
-                        "[data-testid*='gallery']",
-                        "[class*='gallery']",
-                    ]
-
-                    for selector in click_targets:
-                        try:
-                            element = page.query_selector(selector)
-                            if element and element.is_visible():
-                                element.click(force=True)
-                                page.wait_for_timeout(2000)
-                                break
-                        except Exception:
-                            continue
-
-                    modal_images = page.evaluate("""() => {
-                        const modal = document.querySelector('[role="dialog"], [class*="modal"], [class*="lightbox"], [class*="gallery-viewer"]');
-                        const scope = modal ? modal : document.querySelector('main') || document.body;
-                        const imgs = Array.from(scope.querySelectorAll('img'));
-                        return imgs.map(img => img.src || img.getAttribute('data-src')).filter(Boolean);
-                    }""")
-
-                    for u in modal_images:
-                        clean_u = u.split("?")[0]
-                        if not re.search(r"(logo|avatar|icon|map|tile|static|assets|\.svg|google|facebook|popup|promo|ads)", clean_u, re.I):
-                            if clean_u not in gallery_images:
-                                gallery_images.append(clean_u)
-
-                html_content = page.content()
-                browser.close()
-
-                with open(os.path.join(self.folder, "pagina_renderizada.html"), "w", encoding="utf-8") as f:
-                    f.write(html_content)
-
-                return html_content, gallery_images
-
-            except Exception as e:
-                print(f"  [Error en navegación]: {e}")
-                browser.close()
-                return None, gallery_images
+                context.close()
+            except Exception:
+                pass
+            if _own:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                if _pw:
+                    try:
+                        _pw.stop()
+                    except Exception:
+                        pass
 
     def _extract_tipo_inmueble(
         self, soup: BeautifulSoup, schema_data: dict, next_data: dict

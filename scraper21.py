@@ -21,13 +21,15 @@ class Century21Scraper:
         match = re.search(r"propiedad/(\d+)", url) or re.search(r"(\d+)", url)
         return match.group(1) if match else "desconocido"
 
-    def fetch_rendered_html_and_images(self) -> tuple[str, list]:
+    def fetch_rendered_html_and_images(self, browser=None) -> tuple[str, list]:
         """Método principal llamado por main.py para scrapers basados en Playwright."""
-        print(
-            f"[1/4] Abriendo Chromium para Century 21 (ID: {self.id_inmueble})..."
-        )
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
+        print(f"[1/4] Abriendo Chromium para Century 21 (ID: {self.id_inmueble})...")
+        _pw = None
+        _own = browser is None
+
+        if _own:
+            _pw = sync_playwright().start()
+            browser = _pw.chromium.launch(
                 headless=True,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -35,37 +37,48 @@ class Century21Scraper:
                 ],
             )
 
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={"width": 1440, "height": 900},
-                locale="es-CO",
-            )
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            viewport={"width": 1440, "height": 900},
+            locale="es-CO",
+        )
+        page = context.new_page()
 
-            page = context.new_page()
+        try:
+            page.goto(self.url, wait_until="networkidle", timeout=45000)
+            page.evaluate("window.scrollBy(0, 1000)")
+            page.wait_for_timeout(2000)
 
+            html_content = page.content()
+
+            with open(
+                os.path.join(self.folder, "pagina_renderizada.html"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                f.write(html_content)
+
+            return html_content, []
+
+        except Exception as e:
+            print(f"  [Error al cargar página]: {e}")
+            return "", []
+
+        finally:
             try:
-                page.goto(self.url, wait_until="networkidle", timeout=45000)
-
-                # Scroll para cargar lazy-loading
-                page.evaluate("window.scrollBy(0, 1000)")
-                page.wait_for_timeout(2000)
-
-                html_content = page.content()
-                browser.close()
-
-                with open(
-                    os.path.join(self.folder, "pagina_renderizada.html"),
-                    "w",
-                    encoding="utf-8",
-                ) as f:
-                    f.write(html_content)
-
-                return html_content, []
-
-            except Exception as e:
-                print(f"  [Error al cargar página]: {e}")
-                browser.close()
-                return "", []
+                context.close()
+            except Exception:
+                pass
+            if _own:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                if _pw:
+                    try:
+                        _pw.stop()
+                    except Exception:
+                        pass
 
     def fetch_page(self) -> str:
         """Alias para mantener compatibilidad con invocaciones simples de HTML."""

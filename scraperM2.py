@@ -23,14 +23,17 @@ class MetroCuadradoScraper:
         )
         return match.group(1) if match else "desconocido"
 
-    def fetch_rendered_html_and_images(self) -> tuple[str, list]:
+    def fetch_rendered_html_and_images(self, browser=None) -> tuple[str, list]:
         print(
             f"[1/4] Ejecutando Chromium para renderizar Metrocuadrado (ID: {self.id_inmueble})..."
         )
         extracted_images = []
+        _pw = None
+        _own = browser is None
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
+        if _own:
+            _pw = sync_playwright().start()
+            browser = _pw.chromium.launch(
                 headless=True,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -39,87 +42,95 @@ class MetroCuadradoScraper:
                 ],
             )
 
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={"width": 1920, "height": 1080},
-                locale="es-CO",
-            )
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080},
+            locale="es-CO",
+        )
+        page = context.new_page()
 
-            page = context.new_page()
+        try:
+            page.goto(self.url, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(3000)
 
+            for _ in range(4):
+                page.evaluate("window.scrollBy(0, 600)")
+                page.wait_for_timeout(800)
+
+            for selector in [
+                "button:has-text('fotos')",
+                "button:has-text('Ver')",
+                "[class*='gallery']",
+                "[class*='carousel']",
+                "div.slick-slide",
+            ]:
+                try:
+                    el = page.query_selector(selector)
+                    if el and el.is_visible():
+                        el.click(force=True)
+                        page.wait_for_timeout(1500)
+                        break
+                except Exception:
+                    continue
+
+            raw_dom_urls = page.evaluate("""() => {
+                const urls = [];
+                document.querySelectorAll('img').forEach(img => {
+                    if (img.src) urls.push(img.src);
+                    if (img.getAttribute('data-src')) urls.push(img.getAttribute('data-src'));
+                    if (img.getAttribute('data-lazy')) urls.push(img.getAttribute('data-lazy'));
+                    if (img.srcset) {
+                        img.srcset.split(',').forEach(s => urls.push(s.trim().split(' ')[0]));
+                    }
+                });
+                document.querySelectorAll('source').forEach(src => {
+                    if (src.srcset) {
+                        src.srcset.split(',').forEach(s => urls.push(s.trim().split(' ')[0]));
+                    }
+                });
+                return urls;
+            }""")
+
+            for u in raw_dom_urls:
+                if u and isinstance(u, str):
+                    if u.startswith("//"):
+                        u = f"https:{u}"
+                    clean_u = u.split("?")[0]
+                    if not re.search(
+                        r"(logo|avatar|icon|map|tile|static|assets|\.svg|banner|google|facebook|marker)",
+                        clean_u,
+                        re.I,
+                    ):
+                        if clean_u not in extracted_images:
+                            extracted_images.append(clean_u)
+
+            html_content = page.content()
+
+            html_path = os.path.join(self.folder, "pagina_renderizada.html")
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+
+            return html_content, extracted_images
+
+        except Exception as e:
+            print(f"  [Error al cargar página]: {e}")
+            return None, extracted_images
+
+        finally:
             try:
-                page.goto(
-                    self.url, wait_until="domcontentloaded", timeout=60000
-                )
-                page.wait_for_timeout(3000)
-
-                # Scroll progresivo para forzar lazy load de imágenes
-                for _ in range(4):
-                    page.evaluate("window.scrollBy(0, 600)")
-                    page.wait_for_timeout(800)
-
-                # Clic táctico en elementos de galería/fotos si existen
-                for selector in [
-                    "button:has-text('fotos')",
-                    "button:has-text('Ver')",
-                    "[class*='gallery']",
-                    "[class*='carousel']",
-                    "div.slick-slide",
-                ]:
+                context.close()
+            except Exception:
+                pass
+            if _own:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                if _pw:
                     try:
-                        el = page.query_selector(selector)
-                        if el and el.is_visible():
-                            el.click(force=True)
-                            page.wait_for_timeout(1500)
-                            break
+                        _pw.stop()
                     except Exception:
-                        continue
-
-                # Extraer todas las URLs de imágenes desde el DOM dentro del navegador
-                raw_dom_urls = page.evaluate("""() => {
-                    const urls = [];
-                    document.querySelectorAll('img').forEach(img => {
-                        if (img.src) urls.push(img.src);
-                        if (img.getAttribute('data-src')) urls.push(img.getAttribute('data-src'));
-                        if (img.getAttribute('data-lazy')) urls.push(img.getAttribute('data-lazy'));
-                        if (img.srcset) {
-                            img.srcset.split(',').forEach(s => urls.push(s.trim().split(' ')[0]));
-                        }
-                    });
-                    document.querySelectorAll('source').forEach(src => {
-                        if (src.srcset) {
-                            src.srcset.split(',').forEach(s => urls.push(s.trim().split(' ')[0]));
-                        }
-                    });
-                    return urls;
-                }""")
-
-                for u in raw_dom_urls:
-                    if u and isinstance(u, str):
-                        if u.startswith("//"):
-                            u = f"https:{u}"
-                        clean_u = u.split("?")[0]
-                        if not re.search(
-                            r"(logo|avatar|icon|map|tile|static|assets|\.svg|banner|google|facebook|marker)",
-                            clean_u,
-                            re.I,
-                        ):
-                            if clean_u not in extracted_images:
-                                extracted_images.append(clean_u)
-
-                html_content = page.content()
-                browser.close()
-
-                html_path = os.path.join(self.folder, "pagina_renderizada.html")
-                with open(html_path, "w", encoding="utf-8") as f:
-                    f.write(html_content)
-
-                return html_content, extracted_images
-
-            except Exception as e:
-                print(f"  [Error al cargar página]: {e}")
-                browser.close()
-                return None, extracted_images
+                        pass
 
     def parse_data(self, html: str, dom_images: list) -> dict:
         print("[2/4] Extrayendo y estructurando metadatos...")

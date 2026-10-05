@@ -64,6 +64,7 @@ from scraperFR import FincaRaizScraper
 from scraperM2 import MetroCuadradoScraper
 from scraper21 import Century21Scraper
 from word_exporter import WordExporter
+from playwright.sync_api import sync_playwright
 
 logging.basicConfig(
     level=logging.INFO,
@@ -95,18 +96,17 @@ class PipelineOrquestador:
         else:
             raise ValueError(f"Portal no soportado para la URL: {url}")
 
-    def procesar_url(self, url: str) -> Optional[Dict[str, Any]]:
+    def procesar_url(self, url: str, browser=None) -> Optional[Dict[str, Any]]:
         logger.info(f"Procesando URL: {url}")
         try:
             scraper = self._resolver_scraper(url)
 
-            # Sincronización de llamadas según el método disponible
             if hasattr(scraper, "fetch_rendered_html_and_images"):
-                html, imgs = scraper.fetch_rendered_html_and_images()
+                html, imgs = scraper.fetch_rendered_html_and_images(browser=browser)
             elif hasattr(scraper, "fetch_page"):
                 html, imgs = scraper.fetch_page(), []
             elif hasattr(scraper, "fetch_data_and_extract_images"):
-                html, imgs = scraper.fetch_data_and_extract_images()
+                html, imgs = scraper.fetch_data_and_extract_images(browser=browser)
             else:
                 raise AttributeError("El scraper no define un método de extracción válido.")
 
@@ -127,11 +127,23 @@ class PipelineOrquestador:
         logger.info(f"Iniciando procesamiento en lote de {len(urls)} URLs...")
         resultados = []
 
-        for idx, url in enumerate(urls, 1):
-            logger.info(f"--- Inmueble [{idx}/{len(urls)}] ---")
-            data = self.procesar_url(url.strip())
-            if data:
-                resultados.append(data)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-web-security",
+                ],
+            )
+            try:
+                for idx, url in enumerate(urls, 1):
+                    logger.info(f"--- Inmueble [{idx}/{len(urls)}] ---")
+                    data = self.procesar_url(url.strip(), browser=browser)
+                    if data:
+                        resultados.append(data)
+            finally:
+                browser.close()
 
         return resultados
 
