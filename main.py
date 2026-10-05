@@ -33,21 +33,42 @@ def _playwright_driver_exe() -> str | None:
     return None
 
 
-def _ensure_playwright():
-    """Instala Chromium a un path estable y fija PLAYWRIGHT_BROWSERS_PATH."""
-    browsers_path = os.path.join(os.path.expanduser("~"), ".playwright-browsers")
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
-    os.makedirs(browsers_path, exist_ok=True)
+def _default_ms_playwright_path() -> str:
+    """Ruta donde playwright instala navegadores por defecto según el SO."""
+    import platform
+    system = platform.system()
+    if system == "Windows":
+        local_app = os.environ.get(
+            "LOCALAPPDATA",
+            os.path.join(os.path.expanduser("~"), "AppData", "Local"),
+        )
+        return os.path.join(local_app, "ms-playwright")
+    if system == "Darwin":
+        return os.path.join(os.path.expanduser("~"), "Library", "Caches", "ms-playwright")
+    return os.path.join(os.path.expanduser("~"), ".cache", "ms-playwright")
 
-    if _find_chromium_exe(browsers_path):
-        return
+
+def _ensure_playwright():
+    """Fija PLAYWRIGHT_BROWSERS_PATH al directorio que ya tiene Chromium.
+    Si no se encuentra en ningún lado, intenta instalarlo."""
+    candidates = [
+        _default_ms_playwright_path(),
+        os.path.join(os.path.expanduser("~"), ".playwright-browsers"),
+    ]
+
+    for path in candidates:
+        if os.path.isdir(path) and _find_chromium_exe(path):
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = path
+            return
+
+    # No se encontró — instalar en la ruta personalizada
+    install_path = candidates[1]
+    os.makedirs(install_path, exist_ok=True)
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = install_path
 
     print("Primera ejecución: instalando Chromium (esto tarda ~1 minuto)...")
     driver = _playwright_driver_exe()
-    if driver:
-        cmd = [driver, "install", "chromium"]
-    else:
-        cmd = [sys.executable, "-m", "playwright", "install", "chromium"]
+    cmd = [driver, "install", "chromium"] if driver else [sys.executable, "-m", "playwright", "install", "chromium"]
 
     result = subprocess.run(cmd, capture_output=False)
     if result.returncode == 0:
