@@ -31,7 +31,16 @@ jobs:
             --hidden-import=lxml `
             --hidden-import=lxml.etree `
             --hidden-import=lxml._elementpath `
+            --hidden-import=pandas `
+            --hidden-import=pandas._libs.tslibs.base `
+            --hidden-import=pandas._libs.tslibs.np_datetime `
+            --hidden-import=pandas._libs.tslibs.nattype `
+            --hidden-import=pandas._libs.tslibs.timedeltas `
+            --hidden-import=pandas._libs.tslibs.timestamps `
+            --hidden-import=pandas._libs.reduction `
+            --hidden-import=numpy `
             --collect-all=playwright `
+            --collect-all=pandas `
             main.py
 
       - name: Subir ejecutable como artifact
