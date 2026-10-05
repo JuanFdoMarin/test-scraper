@@ -124,7 +124,11 @@ class CiencuadrasScraper:
                 ),
                 "operacion": gen.get("businessType"),
                 "tipo": gen.get("propertyType"),
-                "precio": gen.get("leaseFee") or gen.get("price"),
+                "precio": (
+                    gen.get("leaseFee")
+                    if gen.get("leaseFee") and str(gen.get("leaseFee")) != "0"
+                    else gen.get("price")
+                ),
                 "valor_administracion": admin_fee,
                 "area_m2": gen.get("privateArea"),
                 "habitaciones": gen.get("bedRoomNum"),
