@@ -8,16 +8,24 @@ from typing import List, Dict, Any, Optional
 
 
 def _ensure_playwright():
-    """Instala el browser de Playwright la primera vez que se ejecuta."""
-    marker = os.path.join(os.path.expanduser("~"), ".playwright_chromium_installed")
-    if not os.path.exists(marker):
+    """Instala el browser de Playwright y fija PLAYWRIGHT_BROWSERS_PATH a un path estable."""
+    browsers_path = os.path.join(os.path.expanduser("~"), ".playwright-browsers")
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
+    os.makedirs(browsers_path, exist_ok=True)
+
+    chromium_installed = any(
+        "chromium" in d
+        for d in os.listdir(browsers_path)
+        if os.path.isdir(os.path.join(browsers_path, d))
+    )
+
+    if not chromium_installed:
         print("Primera ejecución: instalando Chromium (esto tarda ~1 minuto)...")
         result = subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium"],
             capture_output=False,
         )
         if result.returncode == 0:
-            open(marker, "w").close()
             print("Chromium instalado correctamente.\n")
         else:
             print("Advertencia: no se pudo instalar Chromium automáticamente.")
@@ -87,7 +95,7 @@ class PipelineOrquestador:
             return data_normalizada
 
         except Exception as e:
-            logger.error(f"✗ Error al procesar {url}: {e}", exc_info=True)
+            logger.exception(f"✗ Error al procesar {url}: {e}")
             return None
 
     def procesar_lote(self, urls: List[str]) -> List[Dict[str, Any]]:
@@ -161,7 +169,7 @@ class PipelineOrquestador:
             word_path = word_exp.generar_documento(datos)
             logger.info(f"Informe Word generado en: {word_path}")
         except Exception as e:
-            logger.error(f"Error al generar informe Word: {e}", exc_info=True)
+            logger.exception(f"Error al generar informe Word: {e}")
 
 
 if __name__ == "__main__":
