@@ -82,6 +82,36 @@ class PipelineOrquestador:
     def __init__(self, output_dir: str = "resultados_consolidados"):
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
+        self._pw = None
+        self._browser = None
+
+    def _get_browser(self):
+        """Crea el browser de Playwright la primera vez que se necesita (lazy)."""
+        if self._browser is None:
+            self._pw = sync_playwright().start()
+            self._browser = self._pw.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-web-security",
+                ],
+            )
+        return self._browser
+
+    def _close_browser(self):
+        if self._browser:
+            try:
+                self._browser.close()
+            except Exception:
+                pass
+            self._browser = None
+        if self._pw:
+            try:
+                self._pw.stop()
+            except Exception:
+                pass
+            self._pw = None
 
     def _resolver_scraper(self, url: str):
         url_lower = url.lower()
@@ -96,17 +126,17 @@ class PipelineOrquestador:
         else:
             raise ValueError(f"Portal no soportado para la URL: {url}")
 
-    def procesar_url(self, url: str, browser=None) -> Optional[Dict[str, Any]]:
+    def procesar_url(self, url: str) -> Optional[Dict[str, Any]]:
         logger.info(f"Procesando URL: {url}")
         try:
             scraper = self._resolver_scraper(url)
 
             if hasattr(scraper, "fetch_rendered_html_and_images"):
-                html, imgs = scraper.fetch_rendered_html_and_images(browser=browser)
+                html, imgs = scraper.fetch_rendered_html_and_images(browser=self._get_browser())
             elif hasattr(scraper, "fetch_page"):
                 html, imgs = scraper.fetch_page(), []
             elif hasattr(scraper, "fetch_data_and_extract_images"):
-                html, imgs = scraper.fetch_data_and_extract_images(browser=browser)
+                html, imgs = scraper.fetch_data_and_extract_images(browser=self._get_browser())
             else:
                 raise AttributeError("El scraper no define un método de extracción válido.")
 
@@ -126,25 +156,14 @@ class PipelineOrquestador:
     def procesar_lote(self, urls: List[str]) -> List[Dict[str, Any]]:
         logger.info(f"Iniciando procesamiento en lote de {len(urls)} URLs...")
         resultados = []
-
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(
-                headless=True,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                    "--disable-web-security",
-                ],
-            )
-            try:
-                for idx, url in enumerate(urls, 1):
-                    logger.info(f"--- Inmueble [{idx}/{len(urls)}] ---")
-                    data = self.procesar_url(url.strip(), browser=browser)
-                    if data:
-                        resultados.append(data)
-            finally:
-                browser.close()
-
+        try:
+            for idx, url in enumerate(urls, 1):
+                logger.info(f"--- Inmueble [{idx}/{len(urls)}] ---")
+                data = self.procesar_url(url.strip())
+                if data:
+                    resultados.append(data)
+        finally:
+            self._close_browser()
         return resultados
 
     def exportar_dataset(self, datos: List[Dict[str, Any]]):
