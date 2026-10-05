@@ -7,29 +7,54 @@ import subprocess
 from typing import List, Dict, Any, Optional
 
 
+def _find_chromium_exe(browsers_path: str) -> str | None:
+    """Retorna la ruta al ejecutable de Chromium si existe, o None."""
+    import platform
+    exe_name = "chrome-headless-shell.exe" if platform.system() == "Windows" else "chrome-headless-shell"
+    for item in os.listdir(browsers_path):
+        if "chromium" in item:
+            for root, _, files in os.walk(os.path.join(browsers_path, item)):
+                if exe_name in files:
+                    return os.path.join(root, exe_name)
+    return None
+
+
+def _playwright_driver_exe() -> str | None:
+    """Ruta al driver de Playwright; funciona tanto en venv como en bundle PyInstaller."""
+    try:
+        import pathlib
+        import playwright as _pw
+        pkg_dir = pathlib.Path(_pw.__file__).parent
+        driver = pkg_dir / "driver" / ("playwright.cmd" if sys.platform == "win32" else "playwright.sh")
+        if driver.exists():
+            return str(driver)
+    except Exception:
+        pass
+    return None
+
+
 def _ensure_playwright():
-    """Instala el browser de Playwright y fija PLAYWRIGHT_BROWSERS_PATH a un path estable."""
+    """Instala Chromium a un path estable y fija PLAYWRIGHT_BROWSERS_PATH."""
     browsers_path = os.path.join(os.path.expanduser("~"), ".playwright-browsers")
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
     os.makedirs(browsers_path, exist_ok=True)
 
-    chromium_installed = any(
-        "chromium" in d
-        for d in os.listdir(browsers_path)
-        if os.path.isdir(os.path.join(browsers_path, d))
-    )
+    if _find_chromium_exe(browsers_path):
+        return
 
-    if not chromium_installed:
-        print("Primera ejecución: instalando Chromium (esto tarda ~1 minuto)...")
-        result = subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium"],
-            capture_output=False,
-        )
-        if result.returncode == 0:
-            print("Chromium instalado correctamente.\n")
-        else:
-            print("Advertencia: no se pudo instalar Chromium automáticamente.")
-            print("Ejecutá manualmente: playwright install chromium\n")
+    print("Primera ejecución: instalando Chromium (esto tarda ~1 minuto)...")
+    driver = _playwright_driver_exe()
+    if driver:
+        cmd = [driver, "install", "chromium"]
+    else:
+        cmd = [sys.executable, "-m", "playwright", "install", "chromium"]
+
+    result = subprocess.run(cmd, capture_output=False)
+    if result.returncode == 0:
+        print("Chromium instalado correctamente.\n")
+    else:
+        print("Advertencia: no se pudo instalar Chromium automáticamente.")
+        print("Ejecutá manualmente: playwright install chromium\n")
 
 
 _ensure_playwright()
