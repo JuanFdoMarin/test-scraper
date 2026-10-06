@@ -7,12 +7,19 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 from normalizer import Normalizer
 
-try:
-    from dotenv import load_dotenv
-    _base = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
-    load_dotenv(os.path.join(_base, ".env"))
-except ImportError:
-    pass
+def _load_env(path: str) -> None:
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, val = line.partition("=")
+                    os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+    except FileNotFoundError:
+        pass
+
+_base = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
+_load_env(os.path.join(_base, ".env"))
 
 BASE_URL = "https://21online.century21colombia.com"
 
